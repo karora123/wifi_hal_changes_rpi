@@ -1022,45 +1022,17 @@ INT wifi_getSSIDStatus(INT ssidIndex, CHAR *output_string) //Tr181
 // Outputs a 32 byte or less string indicating the SSID name.  Sring buffer must be preallocated by the caller.
 INT wifi_getSSIDName(INT apIndex, CHAR *output)
 {
-    char str[MAX_BUF_SIZE]={'\0'};
-    char *ch = NULL;
-	char *ch2 =  NULL;
-
+	struct params params={"ssid",NULL};
 	if (NULL == output) 
 		return RETURN_ERR;
 	
-	struct params params;
-//  strcpy(params.name,"ssid");
-//	hostapd_read(apIndex,params,output);
 	printf("\n%s ssidName=%s\n",__func__,conf[apIndex].ssid);
-    strcpy(output,conf[apIndex].ssid);
+	hostapd_read(apIndex,&params,output);
+
 	if(output==NULL)
 		return RETURN_ERR;
 	else
 		return RETURN_OK;
-#if 0
-        if(_syscmd("grep 'ssid=' /etc/hostapd.conf",str,sizeof(str)) == RETURN_ERR)
-	{
-                wifi_dbg_printf("\nError %d:%s:%s\n",__LINE__,__func__,__FILE__);
-                return RETURN_ERR;
-	}
-
-        ch=strchr(str,'=');
-        if(ch==NULL)
-	   return RETURN_ERR;
-
-        ch++;
-
-        ch2=strchr(ch,'\n');
-        if(ch2==NULL)
-           return RETURN_ERR;
-        else
-          *ch2='\0';
-
-        strncpy(output,ch,strlen(str));
-        wifi_dbg_printf("\noutput='%s'\n",output);
-	#endif
-        return RETURN_OK;
 
 }
         
@@ -1075,7 +1047,8 @@ INT wifi_setSSIDName(INT apIndex, CHAR *ssid_string)
   strcpy(params.name,"ssid");
   strcpy(params.value,ssid_string);
   wifi_stopHostApd();
-  write_hostapd(apIndex,&params);
+  printf("\n%s\n",__func__);
+  hostapd_write(apIndex,&params);
   wifi_startHostApd();
   #if 0
   //fetch ssid name
@@ -2197,10 +2170,17 @@ INT wifi_setApSecurityModeEnabled(INT apIndex, CHAR *encMode)
 // PSK Key of 8 to 63 characters is considered an ASCII string, and 64 characters are considered as HEX value
 INT wifi_getApSecurityPreSharedKey(INT apIndex, CHAR *output_string)
 {	
-	if(!output_string)
+	struct params params={"wpa_passphrase",NULL};
+	if (NULL == output_string) 
 		return RETURN_ERR;
-	snprintf(output_string, 64, "E4A7A43C99DFFA57");
-	return RETURN_OK;
+	
+	printf("\n%s ssidName=%s\n",__func__,conf[apIndex].ssid);
+	hostapd_read(apIndex,&params,output_string);
+
+	if(output_string==NULL)
+		return RETURN_ERR;
+	else
+		return RETURN_OK;
 }
 
 // sets an enviornment variable for the psk. Input string preSharedKey must be a maximum of 64 characters
@@ -2208,7 +2188,16 @@ INT wifi_getApSecurityPreSharedKey(INT apIndex, CHAR *output_string)
 INT wifi_setApSecurityPreSharedKey(INT apIndex, CHAR *preSharedKey)        
 {	
 	//save to wifi config and hotapd config. wait for wifi reset or hostapd restet to apply
-	return RETURN_ERR;
+  struct params params;
+  strcpy(params.name,"wpa_passphrase");
+  strcpy(params.value,preSharedKey);
+  if(strlen(preSharedKey)<8 || strlen(preSharedKey)>63)
+  	wifi_dbg_printf("\nCannot Set Preshared Key length of preshared key should be 8 to 63 chars\n");
+  wifi_stopHostApd();
+  hostapd_write(apIndex,&params);
+  wifi_startHostApd();
+
+  return RETURN_ERR;
 }
 
 //A passphrase from which the PreSharedKey is to be generated, for WPA-Personal or WPA2-Personal or WPA-WPA2-Personal security modes.
