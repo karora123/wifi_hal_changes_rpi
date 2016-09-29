@@ -1633,7 +1633,13 @@ INT wifi_getIndexFromName(CHAR *inputSsidString, INT *ouput_int)
 // Outputs a 32 byte or less string indicating the beacon type as "None", "Basic", "WPA", "11i", "WPAand11i"
 INT wifi_getApBeaconType(INT apIndex, CHAR *output_string)
 {
-	if (NULL == output_string) 
+  struct params params;
+  strncpy(params.name,"wpa",strlen("wpa"));
+  if(strncmp(authMode,"PSKAuthentication",strlen(authMode));
+     strncpy(params.value,"WPA-PSK");
+  else if(strncmp(authMode,"EAPAuthentication",strlen(authMode));
+     strncpy(params.value,"WPA-EAP");
+  if (NULL == output_string)
 		return RETURN_ERR;
 	snprintf(output_string, 32, "WPA");
 	return RETURN_OK;
@@ -1643,8 +1649,14 @@ INT wifi_getApBeaconType(INT apIndex, CHAR *output_string)
 // Sets the beacon type enviornment variable. Allowed input strings are "None", "Basic", "WPA, "11i", "WPAand11i"
 INT wifi_setApBeaconType(INT apIndex, CHAR *beaconTypeString)
 {
-	//save the beaconTypeString to wifi config and hostapd config file. Wait for wifi reset or hostapd restart to apply
-	return RETURN_ERR;
+  struct params params;
+  strncpy(params.name,"wpa",strlen("wpa"));
+  if(strncmp(authMode,"WPAand11i",strlen(beaconType));
+     strncpy(params.value,"2");
+  else if(strncmp(authMode,"WPA",strlen(beaconType));
+     strncpy(params.value,"1");
+  //save the beaconTypeString to wifi config and hostapd config file. Wait for wifi reset or hostapd restart to apply
+  return RETURN_ERR;
 }
 
 // sets the beacon interval on the hardware for this AP
@@ -1733,8 +1745,15 @@ INT wifi_setApAuthMode(INT apIndex, INT mode)
 // sets an enviornment variable for the authMode. Valid strings are "None", "EAPAuthentication" or "SharedAuthentication"                     
 INT wifi_setApBasicAuthenticationMode(INT apIndex, CHAR *authMode)
 {
+  struct params params;
+  strcpy(params.name,"wpa_key_mgmt");
+  if(strncmp(authMode,"PSKAuthentication",strlen(authMode));
+     strncpy(params.value,"WPA-PSK");
+  else if(strncmp(authMode,"EAPAuthentication",strlen(authMode));
+     strncpy(params.value,"WPA-EAP");
 	//save to wifi config, and wait for wifi restart to apply
-	return RETURN_ERR;
+  hostapd_write(apIndex,&params);
+  return RETURN_OK;
 }
 
 // Outputs the number of stations associated per AP
