@@ -8549,18 +8549,19 @@ CosaDmlWiFiApSecSetCfg
 {
     ANSC_STATUS                     returnStatus   = ANSC_STATUS_SUCCESS;
     PCOSA_DML_WIFI_APSEC_CFG pStoredCfg = NULL;
-wifiDbgPrintf("%s\n",__FUNCTION__);
+	wifiDbgPrintf("\n%s",__FUNCTION__);
 
     int wlanIndex;
     char securityType[32];
     char authMode[32];
-
     if (!pCfg)
     {
         return ANSC_STATUS_FAILURE;
     }
-    
-    wifi_getIndexFromName(pSsid, &wlanIndex);
+	/*wlanIndex starts from while Instance starts from 1*/
+	wlanIndex=atoi(pSsid) - 1;
+	printf("\nwlanIndex=%d\n",wlanIndex);
+//    wifi_getIndexFromName(pSsid, &wlanIndex);
     if (wlanIndex == -1) 
     {
 	// Error could not find index
