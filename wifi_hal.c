@@ -72,8 +72,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "hostapd_cmd.h"
 #include "wifi_hal.h"
+#include "wifi_hostapd_interface.h"
+
 
 #ifndef AP_PREFIX
 #define AP_PREFIX	"ath"
@@ -94,7 +95,10 @@
 #define wifi_dbg_printf(format,args...) printf("")
 #endif
 
+#define wifi_dbg_printf printf
+#ifdef USE_STRUCT
 extern struct hostap_conf conf[2];
+#endif
 int _syscmd(char *cmd, char *retBuf, int retBufSize)
 {
     FILE *f;
@@ -252,11 +256,11 @@ INT wifi_initRadio(INT radioIndex)
 // Initializes the wifi subsystem (all radios)
 INT wifi_init()                            //RDKB
 {
-	static int count=0;
 	//TODO: Initializes the wifi subsystem
-	printf("\ncount=%d\n",count);
-	count++;
+	#ifdef USE_HOSTAPD_STRUCT
 	read_hostapd_all_aps();
+	#endif
+	return RETURN_OK;
 }
 
 /* wifi_reset() function */
@@ -516,8 +520,40 @@ INT wifi_getRadioSupportedStandards(INT radioIndex, CHAR *output_string) //Tr181
 //The output_string is a max length 64 octet string that is allocated by the RDKB code.  Implementations must ensure that strings are not longer than this.
 INT wifi_getRadioStandard(INT radioIndex, CHAR *output_string, BOOL *gOnly, BOOL *nOnly, BOOL *acOnly)	//RDKB
 {
+	struct params params={"hw_mode",NULL};
 	if (NULL == output_string) 
 		return RETURN_ERR;
+	#if 0	
+	hostapd_read(radioIndex,&params,output_string);
+
+
+	if (NULL == output_string) 
+	{
+		wifi_dbg_printf("\nhostapd_read returned NULL\n");
+		return RETURN_ERR;
+	}
+	if(strcmp(output_string,"g")==0)
+	{
+		*gOnly=TRUE;
+		*nOnly=FALSE;
+		*acOnly=FALSE;
+	}
+	else if(strcmp(output_string,"n"==0))
+	{
+		*gOnly=FALSE;
+		*nOnly=TRUE;
+		*acOnly=FALSE;
+	}
+	else if(strcmp(output_string,"ac"==0))
+	{
+		*gOnly=FALSE;
+		*nOnly=FALSE;
+		*acOnly=TRUE;
+	}
+	else
+		wifi_dbg_printf("\nInvalid Mode\n");
+
+#if 0
 	if(radioIndex==0) {
 		snprintf(output_string, 64, "n");		//"ht" needs to be translated to "n" or others
 		*gOnly=FALSE;
@@ -529,6 +565,8 @@ INT wifi_getRadioStandard(INT radioIndex, CHAR *output_string, BOOL *gOnly, BOOL
 		*nOnly=FALSE;
 		*acOnly=FALSE;	
 	}
+#endif
+#endif
 	return RETURN_OK;
 
 }
@@ -563,35 +601,29 @@ INT wifi_getRadioChannelsInUse(INT radioIndex, CHAR *output_string)	//RDKB
 //Get the running channel number 
 INT wifi_getRadioChannel(INT radioIndex,ULONG *output_ulong)	//RDKB
 {
-	char cmd[128]={0};
-	char buf[256]={0};
-	INT apIndex;
-	
-	if (NULL == output_ulong) 
-		return RETURN_ERR;
-		
-	apIndex=(radioIndex==0)?0:1;
-	
-
-	snprintf(cmd, sizeof(cmd), "iwlist %s%d channel | grep Current | | cut -d'(' -f2 | cut -d')' -f1 | cut -d' ' -f2", AP_PREFIX, apIndex);
-	_syscmd(cmd, buf, sizeof(buf));
-
-	*output_ulong=0;
-	if(strlen(buf)>=1)
-		*output_ulong = atol(buf);
-	
-	if(*output_ulong<=0)  {
-		//TODO: SSID is inactive, get channel from wifi config
-		//*output_ulong = 0;		
-	}	
-	return RETURN_OK;
+  struct params params={"channel",NULL};
+  char output[3]={'\0'};
+  #if 0
+  hostapd_read(radioIndex,&params,output);
+  if(output!=NULL)
+  {
+	output_ulong=atol(output);
+  }
+  #endif
+  return RETURN_OK;
 }
 
 //Set the running channel number 
 INT wifi_setRadioChannel(INT radioIndex, ULONG channel)	//RDKB	//AP only
 {
-	//Set to wifi config only. Wait for wifi reset or wifi_pushRadioChannel to apply.
-	return RETURN_ERR;
+  struct params params;
+  char str_channel[3]={'\0'};
+  strncpy(params.name,"channel",strlen("channel"));
+  sprintf(str_channel,"%d",channel);
+  strncpy(params.value,str_channel,strlen(str_channel));
+  hostapd_write(radioIndex,&params);
+  //Set to wifi config only. Wait for wifi reset or wifi_pushRadioChannel to apply.
+  return RETURN_OK;
 }
 
 //Enables or disables a driver level variable to indicate if auto channel selection is enabled on this radio
@@ -1026,7 +1058,6 @@ INT wifi_getSSIDName(INT apIndex, CHAR *output)
 	if (NULL == output) 
 		return RETURN_ERR;
 	
-	printf("\n%s ssidName=%s\n",__func__,conf[apIndex].ssid);
 	hostapd_read(apIndex,&params,output);
 
 	if(output==NULL)
@@ -1046,10 +1077,10 @@ INT wifi_setSSIDName(INT apIndex, CHAR *ssid_string)
   struct params params;
   strcpy(params.name,"ssid");
   strcpy(params.value,ssid_string);
-  wifi_stopHostApd();
+//  wifi_stopHostApd();
   printf("\n%s\n",__func__);
   hostapd_write(apIndex,&params);
-  wifi_startHostApd();
+//  wifi_startHostApd();
   #if 0
   //fetch ssid name
   if(_syscmd("grep 'ssid=' /etc/hostapd.conf",str,sizeof(str)) == RETURN_ERR )
@@ -1072,7 +1103,7 @@ INT wifi_setSSIDName(INT apIndex, CHAR *ssid_string)
           wifi_dbg_printf("\nError %d:%s:%s\n",__LINE__,__func__,__FILE__);
           return RETURN_ERR;
   }
-  wifi_startHostApd();
+//  wifi_startHostApd();
   #endif
   return RETURN_ERR;
 }
@@ -1633,15 +1664,17 @@ INT wifi_getIndexFromName(CHAR *inputSsidString, INT *ouput_int)
 // Outputs a 32 byte or less string indicating the beacon type as "None", "Basic", "WPA", "11i", "WPAand11i"
 INT wifi_getApBeaconType(INT apIndex, CHAR *output_string)
 {
-  struct params params;
-  strncpy(params.name,"wpa",strlen("wpa"));
-  if(strncmp(authMode,"PSKAuthentication",strlen(authMode));
-     strncpy(params.value,"WPA-PSK");
-  else if(strncmp(authMode,"EAPAuthentication",strlen(authMode));
-     strncpy(params.value,"WPA-EAP");
-  if (NULL == output_string)
+    struct params params={"beaconType",NULL};
+	
+
+    if (NULL == output_string)
+	        return RETURN_ERR;
+
+	#if 0
+    hostapd_read(apIndex,&params,output_string);
+	if (NULL == output_string) 
 		return RETURN_ERR;
-	snprintf(output_string, 32, "WPA");
+	#endif
 	return RETURN_OK;
 
 }
@@ -1649,14 +1682,17 @@ INT wifi_getApBeaconType(INT apIndex, CHAR *output_string)
 // Sets the beacon type enviornment variable. Allowed input strings are "None", "Basic", "WPA, "11i", "WPAand11i"
 INT wifi_setApBeaconType(INT apIndex, CHAR *beaconTypeString)
 {
-  struct params params;
-  strncpy(params.name,"wpa",strlen("wpa"));
-  if(strncmp(authMode,"WPAand11i",strlen(beaconType));
-     strncpy(params.value,"2");
-  else if(strncmp(authMode,"WPA",strlen(beaconType));
-     strncpy(params.value,"1");
-  //save the beaconTypeString to wifi config and hostapd config file. Wait for wifi reset or hostapd restart to apply
-  return RETURN_ERR;
+    struct params params={"beaconType",NULL};
+	if (NULL == beaconTypeString)
+		        return RETURN_ERR;
+	
+	#if 0
+	strncpy(params.value,beaconTypeString,sizeof(beaconTypeString));
+
+    hostapd_write(apIndex,&params);
+	#endif
+	//save the beaconTypeString to wifi config and hostapd config file. Wait for wifi reset or hostapd restart to apply
+	return RETURN_ERR;
 }
 
 // sets the beacon interval on the hardware for this AP
@@ -1701,16 +1737,51 @@ INT wifi_setApRtsThreshold(INT apIndex, UINT threshold)
 // ouputs up to a 32 byte string as either "TKIPEncryption", "AESEncryption", or "TKIPandAESEncryption"
 INT wifi_getApWpaEncryptionMode(INT apIndex, CHAR *output_string)
 {
+	
+	struct params params={"wpa_pairwise",NULL};
 	if (NULL == output_string) 
 		return RETURN_ERR;
-	snprintf(output_string, 32, "TKIPandAESEncryption");
+	
+#if 0
+	hostapd_read(apIndex,&params,output_string);
+	if (NULL == output_string) 
+		return RETURN_ERR;
+	
+	if (strcmp(output_string,"TKIP") == 0)
+		strncpy(output_string,"TKIPEncryption",strlen("TKIPEncryption"));
+	else if(strcmp(output_string,"CCMP") == 0)
+		strncpy(output_string,"AESEncryption",strlen("AESEncryption"));
+	else if(strcmp(output_string,"TKIP CCMP") == 0)
+		strncpy(output_string,"TKIPandAESEncryption",strlen("TKIPandAESEncryption"));
+#endif	
 	return RETURN_OK;
-
 }
 
 // sets the encyption mode enviornment variable.  Valid string format is "TKIPEncryption", "AESEncryption", or "TKIPandAESEncryption"
 INT wifi_setApWpaEncryptionMode(INT apIndex, CHAR *encMode)
 {
+
+	struct params params;
+	int ret;
+
+	#if 0
+	strncpy(params.name, "wpa_pairwise", strlen("wpa_pairwise"));
+
+    if ( strcmp(encMode, "TKIPEncryption") == 0)
+    {
+	   strncpy(params.value, "TKIP", strlen("TKIP"));
+    } else if ( strcmp(encMode,"AESEncryption") == 0)
+    {
+        strncpy(params.value, "CCMP", strlen("CCMP"));
+    } else if (strcmp(encMode,"TKIPandAESEncryption") == 0)
+    {
+		strncpy(params.value,"TKIP CCMP",strlen("TKIP CCMP"));
+    }
+	ret=hostapd_write(apIndex,&params);
+  	#endif
+	
+	return RETURN_OK;
+
 	//Save the encMode to wifi config and hostpad config. wait for wifi restart or hotapd restart to apply
 	return RETURN_ERR;
 }
@@ -1745,15 +1816,17 @@ INT wifi_setApAuthMode(INT apIndex, INT mode)
 // sets an enviornment variable for the authMode. Valid strings are "None", "EAPAuthentication" or "SharedAuthentication"                     
 INT wifi_setApBasicAuthenticationMode(INT apIndex, CHAR *authMode)
 {
-  struct params params;
-  strcpy(params.name,"wpa_key_mgmt");
-  if(strncmp(authMode,"PSKAuthentication",strlen(authMode));
-     strncpy(params.value,"WPA-PSK");
-  else if(strncmp(authMode,"EAPAuthentication",strlen(authMode));
-     strncpy(params.value,"WPA-EAP");
 	//save to wifi config, and wait for wifi restart to apply
-  hostapd_write(apIndex,&params);
-  return RETURN_OK;
+	struct params params;
+	int ret;
+	#if 0
+	if(authMode ==  NULL)
+		return RETURN_ERR;
+	strncpy(params.name,"wpa_key_mgmt",strlen("wpa_key_mgmt"));
+	strncpy(params.value,authMode,strlen(authMode));
+	ret=hostapd_write(apIndex,&params);
+	#endif
+	return ret;
 }
 
 // Outputs the number of stations associated per AP
@@ -2193,7 +2266,6 @@ INT wifi_getApSecurityPreSharedKey(INT apIndex, CHAR *output_string)
 	if (NULL == output_string) 
 		return RETURN_ERR;
 	
-	printf("\n%s ssidName=%s\n",__func__,conf[apIndex].ssid);
 	hostapd_read(apIndex,&params,output_string);
 
 	if(output_string==NULL)
@@ -2205,28 +2277,38 @@ INT wifi_getApSecurityPreSharedKey(INT apIndex, CHAR *output_string)
 // sets an enviornment variable for the psk. Input string preSharedKey must be a maximum of 64 characters
 // PSK Key of 8 to 63 characters is considered an ASCII string, and 64 characters are considered as HEX value
 INT wifi_setApSecurityPreSharedKey(INT apIndex, CHAR *preSharedKey)        
-{	
+{ 
 	//save to wifi config and hotapd config. wait for wifi reset or hostapd restet to apply
-  struct params params;
-  strcpy(params.name,"wpa_passphrase");
-  strcpy(params.value,preSharedKey);
-  if(strlen(preSharedKey)<8 || strlen(preSharedKey)>63)
-  	wifi_dbg_printf("\nCannot Set Preshared Key length of preshared key should be 8 to 63 chars\n");
-  wifi_stopHostApd();
-  hostapd_write(apIndex,&params);
-  wifi_startHostApd();
-
-  return RETURN_ERR;
+	struct params params;
+	int ret;
+	strcpy(params.name,"wpa_passphrase");
+	strcpy(params.value,preSharedKey);
+	if(strlen(preSharedKey)<8 || strlen(preSharedKey)>63)
+	{
+		wifi_dbg_printf("\nCannot Set Preshared Key length of preshared key should be 8 to 63 chars\n");
+		return RETURN_ERR;
+	}
+	else
+	{
+		ret=hostapd_write(apIndex,&params);
+		return ret;
+	}
 }
 
 //A passphrase from which the PreSharedKey is to be generated, for WPA-Personal or WPA2-Personal or WPA-WPA2-Personal security modes.
 // outputs the passphrase, maximum 63 characters
 INT wifi_getApSecurityKeyPassphrase(INT apIndex, CHAR *output_string)
 {	
-	if(!output_string)
+	struct params params={"wpa_passphrase",NULL};
+    if (NULL == output_string)
+	return RETURN_ERR;
+	hostapd_read(apIndex,&params,output_string);
+
+	if(output_string==NULL)
 		return RETURN_ERR;
-	snprintf(output_string, 63, "12345678");
-	return RETURN_OK;
+	else
+		return RETURN_OK;
+
 }
 
 // sets the passphrase enviornment variable, max 63 characters
