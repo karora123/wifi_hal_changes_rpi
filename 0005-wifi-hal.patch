@@ -1,0 +1,161 @@
+diff --git a/source/wifi/wifi_hal.c b/source/wifi/wifi_hal.c
+index 04b42f1..d40c74a 100644
+--- a/source/wifi/wifi_hal.c
++++ b/source/wifi/wifi_hal.c
+@@ -72,6 +72,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include "hostapd_cmd.h"
+ #include "wifi_hal.h"
+ 
+ #ifndef AP_PREFIX
+@@ -85,7 +86,7 @@
+ #define MAX_BUF_SIZE 128
+ #define MAX_CMD_SIZE 1024
+ 
+-#define WIFI_DEBUG `1
++#define WIFI_DEBUG 1
+ 
+ #ifdef WIFI_DEBUG
+ #define wifi_dbg_printf printf
+@@ -93,7 +94,7 @@
+ #define wifi_dbg_printf(format,args...) printf("")
+ #endif
+ 
+-
++	#if HOSTAPD_DEBUG
++	extern struct hostap_conf conf[2];
++	#endif
+
+ int _syscmd(char *cmd, char *retBuf, int retBufSize)
+ {
+     FILE *f;
+@@ -251,8 +252,11 @@ INT wifi_initRadio(INT radioIndex)
+ // Initializes the wifi subsystem (all radios)
+ INT wifi_init()                            //RDKB
+ {
+
+ 	//TODO: Initializes the wifi subsystem
+-
++	#if HOSTAPD_DEBUG
++	read_hostapd_all_aps();
++	#endif
++	return RETURN_OK;
+ }
+ 
+ /* wifi_reset() function */
+@@ -1018,34 +1022,16 @@ INT wifi_getSSIDStatus(INT ssidIndex, CHAR *output_string) //Tr181
+ // Outputs a 32 byte or less string indicating the SSID name.  Sring buffer must be preallocated by the caller.
+ INT wifi_getSSIDName(INT apIndex, CHAR *output)
+ {
+-        char str[MAX_BUF_SIZE]={'\0'};
+-        char *ch = NULL;
+-	char *ch2 =  NULL;
+-
++	struct params params={"ssid",NULL};
+ 	if (NULL == output) 
+ 		return RETURN_ERR;
++	
++	hostapd_read(apIndex,&params,output);
+ 
+-        if(_syscmd("grep 'ssid=' /etc/hostapd.conf",str,sizeof(str)) == RETURN_ERR)
+-	{
+-                wifi_dbg_printf("\nError %d:%s:%s\n",__LINE__,__func__,__FILE__);
+-                return RETURN_ERR;
+-	}
+-
+-        ch=strchr(str,'=');
+-        if(ch==NULL)
+-	   return RETURN_ERR;
+-
+-        ch++;
+-
+-        ch2=strchr(ch,'\n');
+-        if(ch2==NULL)
+-           return RETURN_ERR;
+-        else
+-          *ch2='\0';
+-
+-        strncpy(output,ch,strlen(str));
+-        wifi_dbg_printf("\noutput='%s'\n",output);
+-        return RETURN_OK;
++	if(output==NULL)
++		return RETURN_ERR;
++	else
++		return RETURN_OK;
+ 
+ }
+         
+@@ -1056,6 +1042,14 @@ INT wifi_setSSIDName(INT apIndex, CHAR *ssid_string)
+   char str[MAX_BUF_SIZE]={'\0'};
+   char cmd[MAX_CMD_SIZE]={'\0'};
+   char *ch;
++  struct params params;
++  strcpy(params.name,"ssid");
++  strcpy(params.value,ssid_string);
++  wifi_stopHostApd();
++  printf("\n%s\n",__func__);
++  hostapd_write(apIndex,&params);
++  wifi_startHostApd();
++  #if 0
+   //fetch ssid name
+   if(_syscmd("grep 'ssid=' /etc/hostapd.conf",str,sizeof(str)) == RETURN_ERR )
+   {
+@@ -1078,6 +1072,7 @@ INT wifi_setSSIDName(INT apIndex, CHAR *ssid_string)
+           return RETURN_ERR;
+   }
+   wifi_startHostApd();
++  #endif
+   return RETURN_ERR;
+ }
+ 
+@@ -1923,8 +1918,11 @@ INT wifi_startHostApd()
+ 	char cmd[128] = {0};
+ 	char buf[128] = {0};
+ 
+-	sprintf(cmd,"hostapd  -B /etc/hostapd.conf ");
++	sprintf(cmd,"hostapd  -B /etc/hostapd0.conf /etc/hostapd1.conf");
+ 	_syscmd(cmd, buf, sizeof(buf));
++
+ 	return RETURN_OK;
+ }
+ 
+@@ -2171,10 +2169,16 @@ INT wifi_setApSecurityModeEnabled(INT apIndex, CHAR *encMode)
+ // PSK Key of 8 to 63 characters is considered an ASCII string, and 64 characters are considered as HEX value
+ INT wifi_getApSecurityPreSharedKey(INT apIndex, CHAR *output_string)
+ {	
+-	if(!output_string)
++	struct params params={"wpa_passphrase",NULL};
++	if (NULL == output_string) 
+ 		return RETURN_ERR;
+-	snprintf(output_string, 64, "E4A7A43C99DFFA57");
+-	return RETURN_OK;
++	
++	hostapd_read(apIndex,&params,output_string);
++
++	if(output_string==NULL)
++		return RETURN_ERR;
++	else
++		return RETURN_OK;
+ }
+ 
+ // sets an enviornment variable for the psk. Input string preSharedKey must be a maximum of 64 characters
+@@ -2182,7 +2186,16 @@ INT wifi_getApSecurityPreSharedKey(INT apIndex, CHAR *output_string)
+ INT wifi_setApSecurityPreSharedKey(INT apIndex, CHAR *preSharedKey)        
+ {	
+ 	//save to wifi config and hotapd config. wait for wifi reset or hostapd restet to apply
+-	return RETURN_ERR;
++  struct params params;
++  strcpy(params.name,"wpa_passphrase");
++  strcpy(params.value,preSharedKey);
++  if(strlen(preSharedKey)<8 || strlen(preSharedKey)>63)
++  	wifi_dbg_printf("\nCannot Set Preshared Key length of preshared key should be 8 to 63 chars\n");
++  wifi_stopHostApd();
++  hostapd_write(apIndex,&params);
++  wifi_startHostApd();
++
++  return RETURN_ERR;
+ }
+ 
+ //A passphrase from which the PreSharedKey is to be generated, for WPA-Personal or WPA2-Personal or WPA-WPA2-Personal security modes.
