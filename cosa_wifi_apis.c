@@ -5058,7 +5058,9 @@ printf("%s: Reset FactoryReset to 0 \n",__FUNCTION__);
     }
     //TODO:Identify the right place to call startHostApd 
     #if defined (_PLATFORM_RASPBERRYPI_)
+	wifi_init();
     wifi_startHostApd();
+
     #endif
     // Only do once and store BSSID and MacAddress in memory
     if (firstTime == TRUE) {

@@ -256,7 +256,20 @@ INT wifi_initRadio(INT radioIndex)
 // Initializes the wifi subsystem (all radios)
 INT wifi_init()                            //RDKB
 {
+//	char cmd[127];
+	char buf[127];
 	//TODO: Initializes the wifi subsystem
+	_syscmd("iwconfig wlan0|grep 802.11a",buf,sizeof(buf));
+	if(strlen(buf) > 0)
+	{
+		system("sed -i 's/interface=wlan0/interface=wlan1/g' /etc/hostapd0.conf");
+		system("sed -i 's/interface=wlan1/interface=wlan0/g' /etc/hostapd1.conf");
+	}
+	else
+	{
+		system("sed -i 's/interface=wlan1/interface=wlan0/g' /etc/hostapd0.conf");
+		system("sed -i 's/interface=wlan0/interface=wlan1/g' /etc/hostapd1.conf");
+	}
 	#ifdef USE_HOSTAPD_STRUCT
 	read_hostapd_all_aps();
 	#endif
@@ -1121,15 +1134,19 @@ INT wifi_getBaseBSSID(INT ssidIndex, CHAR *output_string)	//RDKB
         if (NULL == output_string)
                 return RETURN_ERR;
 
-        if(_syscmd("grep 'interface=' /etc/hostapd.conf",str,sizeof(str)) == RETURN_ERR)
-	{
-                wifi_dbg_printf("\nError %d:%s:%s\n",__LINE__,__func__,__FILE__);
+		
+		sprintf(cmd,"grep 'interface=' %s%d.conf",HOSTAPD_FNAME,ssidIndex);
+		wifi_dbg_printf("\n%s\n",__func__);
+		printf("\ncmd=%s\n",cmd);
+        if(_syscmd(cmd,str,sizeof(str)) == RETURN_ERR)
+		{
+        	wifi_dbg_printf("\nError %d:%s:%s\n",__LINE__,__func__,__FILE__);
 	        return RETURN_ERR;
-	}
-
-        ch=strchr(str,'=');
-        if(ch==NULL)
-        {
+		}
+		
+		ch=strchr(str,'=');
+		if(ch==NULL)
+		{
         	wifi_dbg_printf("\nError %d:%s:%s\n",__LINE__,__func__,__FILE__);
 	        return RETURN_ERR;
         }
@@ -1142,20 +1159,20 @@ INT wifi_getBaseBSSID(INT ssidIndex, CHAR *output_string)	//RDKB
                 return RETURN_ERR;
         }
         pos = buf;
-        if ((pos = strstr(pos, "HWaddr")) != NULL) {
-
-        // Convert dashes to semicolons
-        char *dash = strchr(pos, '-');
-        while (dash != NULL) {
-            *dash = ':';
-            dash = strchr(dash, '-');
-        }
-        pos += 7;
-        memcpy(output_string, pos, 17);
-        output_string[17] = 0;
-        printf("\n%s\n",output_string);
+        if ((pos = strstr(pos, "HWaddr")) != NULL) 
+		{
+        	char *dash = strchr(pos, '-');
+	        while (dash != NULL) 
+			{
+    	        *dash = ':';
+        	    dash = strchr(dash, '-');
+	        }
+    	    pos += 7;
+        	memcpy(output_string, pos, 17);
+	        output_string[17] = 0;
+    	    printf("\n%s\n",output_string);
     	}
-	return RETURN_OK;
+		return RETURN_OK;
 }
 
 //Get the MAC address associated with this Wifi SSID
@@ -2300,9 +2317,12 @@ INT wifi_setApSecurityPreSharedKey(INT apIndex, CHAR *preSharedKey)
 INT wifi_getApSecurityKeyPassphrase(INT apIndex, CHAR *output_string)
 {	
 	struct params params={"wpa_passphrase",NULL};
+
+	printf("\ngetApSecurityKeyPassphrase\n");
     if (NULL == output_string)
 	return RETURN_ERR;
 	hostapd_read(apIndex,&params,output_string);
+	printf("\noutput_string=%s\n",output_string);
 
 	if(output_string==NULL)
 		return RETURN_ERR;
